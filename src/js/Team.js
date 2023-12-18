@@ -13,4 +13,7 @@
  * */
 export default class Team {
   // TODO: write your logic here
+  constructor(arraycharacters) {
+    this.characters = arraycharacters
+  }
 }
