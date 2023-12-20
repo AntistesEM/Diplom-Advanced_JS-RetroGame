@@ -1,4 +1,4 @@
-import Team from './js/Team';
+import Team from './Team';
 
 /**
  * Формирует экземпляр персонажа из массива allowedTypes со
