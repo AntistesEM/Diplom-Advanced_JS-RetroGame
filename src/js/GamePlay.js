@@ -93,6 +93,7 @@ export default class GamePlay {
 
   /**
    * Add listener to mouse enter for cell
+   * Вход указателя мыши в ячейку поля
    *
    * @param callback
    */
@@ -102,6 +103,7 @@ export default class GamePlay {
 
   /**
    * Add listener to mouse leave for cell
+   * Выход указателя мыши из ячейки поля
    *
    * @param callback
    */
@@ -111,6 +113,7 @@ export default class GamePlay {
 
   /**
    * Add listener to mouse click for cell
+   * Клик мышью по ячейке поля
    *
    * @param callback
    */

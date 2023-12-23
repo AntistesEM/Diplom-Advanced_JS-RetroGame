@@ -16,21 +16,26 @@ export default class GameController {
     this.userTypes = [Bowman, Swordsman, Magician];
     this.enemyTypes = [Vampire, Undead, Daemon];
     [this.userPositions, this.enemyPositions] = this.arrayPosition();
+    this.positionedCharactersAll = [];
   }
 
   init() {
-    // console.log(this.gamePlay);
-    // console.log(this.stateService);
-
     const countTeam = Math.floor(Math.random() * 5) + 1; // случайное количество героев от 1 до 6
     const userTeam = generateTeam(this.userTypes, this.maxLevel, countTeam); // команда игрока
     const enemyTeam = generateTeam(this.enemyTypes, this.maxLevel, countTeam); // команда противника    
     const positionedCharactersUser = this.positionedCharacters(this.userPositions, userTeam, countTeam); // массив объектов PositionedCharacter для игрока
     const positionedCharactersEnemy = this.positionedCharacters(this.enemyPositions, enemyTeam, countTeam); // массив объектов PositionedCharacter для противника
-    const positionedCharacters = positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+    
+    this.positionedCharactersAll = positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
 
     this.gamePlay.drawUi(themes.prairie); // отрисовка поля
-    this.gamePlay.redrawPositions(positionedCharacters); // отрисовка героев на поле
+    this.gamePlay.redrawPositions(this.positionedCharactersAll); // отрисовка героев на поле
+
+    this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
+    console.log(this.gamePlay);
+    console.log(this.gamePlay.cells[0]);
+    // console.log('this.positionedCharactersAll===', this.positionedCharactersAll);
+    console.log(this.gamePlay.cells[1].children);
 
     // TODO: add event listeners to gamePlay events
     // TODO: load saved stated from stateService
@@ -78,10 +83,21 @@ export default class GameController {
   }
 
   onCellEnter(index) {
+    if (this.gamePlay.cells[index].children.length !== 0) {      
+      const character = this.positionedCharactersAll.find((item) => item.position === index);
+      const tooltip = GameController.characterInfo(character.character);
+
+      this.gamePlay.showCellTooltip(tooltip, index);      
+    }
     // TODO: react to mouse enter
   }
 
+  static characterInfo(character) {  // static чтоб использовать в тестах
+    return `\u{1F396}${character.level} \u{2694}${character.attack} \u{1F6E1}${character.defence} \u{2764}${character.health}`;
+  }
+
   onCellLeave(index) {
+    // this.gamePlay.hideCellTooltip(index); // ??? вроде и без этого скрывает подсказку
     // TODO: react to mouse leave
   }
 }
