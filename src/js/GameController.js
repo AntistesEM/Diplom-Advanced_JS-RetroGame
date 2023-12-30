@@ -19,6 +19,9 @@ export default class GameController {
     this.enemyTypes = [Vampire, Undead, Daemon];
     [this.userPositions, this.enemyPositions] = this.arrayPosition();
     this.positionedCharactersAll = [];
+    this.indexSelectedGreen = -1;
+    this.indexSelectedYellow = -1;
+    this.indexSelectedRed = -1;
   }
 
   init() {
@@ -36,46 +39,115 @@ export default class GameController {
     this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
     this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
 
-    console.log(this.gamePlay);
-    console.log('11', this.gamePlay.cells[0]);
+    // console.log(this.gamePlay);
+    // console.log('11', this.gamePlay.cells[0]);
     // console.log('this.positionedCharactersAll===', this.positionedCharactersAll);
-    console.log(this.gamePlay.cells[1].children);
+    // console.log(this.gamePlay.cells[1].children);
 
     // TODO: add event listeners to gamePlay events
     // TODO: load saved stated from stateService
   }
 
   onCellClick(index) {
-    // TODO: react to click
+    // TODO: react to click    
+    const foundCharacter = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedYellow);
+    
     if (this.gamePlay.cells[index].children.length !== 0) {
+      this.indexSelectedRed = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-red'));
+
       if (this.userTypes.find((item) => item.name === this.characterType(index))) {
-        let indexSelected = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-yellow'));
-        
-        if (indexSelected !== -1) {
-          this.gamePlay.deselectCell(indexSelected);
+
+        if (this.indexSelectedYellow !== -1) {
+          this.gamePlay.deselectCell(this.indexSelectedYellow);
         }
 
         this.gamePlay.selectCell(index);
+      } else if (this.indexSelectedYellow !== -1) {
+        if (this.indexSelectedRed !== -1) {
+          const target = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedRed);
+          const damage = Math.max(foundCharacter.character.attack - target.character.defence, foundCharacter.character.attack * 0.1);
+
+          target.character.health = target.character.health - damage;
+
+          this.gamePlay.showDamage(index, damage)
+            .then(() => {
+              this.gamePlay.redrawPositions(this.positionedCharactersAll);
+            });
+        } else {
+          GamePlay.showError('Вы не можете атаковать из данной позиции!');
+        }
       } else {
         GamePlay.showError('Это не ваш персонаж!');
       }
+    } else if (this.indexSelectedYellow !== -1 && this.gamePlay.boardEl.style.cursor === 'pointer') {
+
+      if (foundCharacter) {
+        foundCharacter.position = index;
+      }
+
+      this.gamePlay.redrawPositions(this.positionedCharactersAll);
+      this.gamePlay.deselectCell(this.indexSelectedYellow);
+      this.gamePlay.selectCell(index);
     }
   }
 
   onCellEnter(index) {
-    if (this.gamePlay.cells[index].children.length !== 0) {      
+    this.indexSelectedGreen = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-green'));
+    this.indexSelectedYellow = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-yellow'));
+    this.indexSelectedRed = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-red'));
+
+    if (this.gamePlay.cells[index].children.length !== 0) {
       const character = this.positionedCharactersAll.find((item) => item.position === index);
       const tooltip = GameController.characterInfo(character.character);
+
+      if (this.indexSelectedGreen !== -1) {
+        this.gamePlay.deselectCell(this.indexSelectedGreen);
+      } else if (this.indexSelectedRed !== -1) {        
+        this.gamePlay.deselectCell(this.indexSelectedRed);
+      }
 
       this.gamePlay.showCellTooltip(tooltip, index);  
 
       if (this.userTypes.find((item) => item.name === this.characterType(index))) {
+        // console.log('user');
         this.gamePlay.setCursor(cursors.pointer);
       } else if (this.enemyTypes.find((item) => item.name === this.characterType(index))) {
-        this.gamePlay.setCursor(cursors.crosshair);
+        // console.log('enemy');
+        if (this.indexSelectedYellow !== -1) {
+          const neighbourCellsAttack = this.getNeighbourCellsAttack(this.indexSelectedYellow, this.getDistanceAttack(this.characterType(this.indexSelectedYellow)));
+          // console.log('indexSelectedYellow===', indexSelectedYellow);
+          // console.log('this.getDistanceMove(this.characterType(indexSelectedYellow))===', this.getDistanceMove(this.characterType(indexSelectedYellow)));
+          // console.log('neighbourCellsAttack===', neighbourCellsAttack);
+          // console.log('index===', index);
+          if (neighbourCellsAttack.includes(index)) {
+            // console.log('курсор');
+            this.gamePlay.selectCell(index, 'red'); 
+            this.gamePlay.setCursor(cursors.crosshair);
+          } else {
+            this.gamePlay.setCursor(cursors.notallowed);
+          }
+        }        
       }      
     } else {
-      this.gamePlay.setCursor(cursors.notallowed);
+      if (this.indexSelectedYellow !== -1) {
+        let neighbourCells = this.getNeighbourCells(this.indexSelectedYellow, this.getDistanceMove(this.characterType(this.indexSelectedYellow)));
+
+        if (this.indexSelectedGreen !== -1) {
+          this.gamePlay.deselectCell(this.indexSelectedGreen);
+        } else if (this.indexSelectedRed !== -1) {        
+          this.gamePlay.deselectCell(this.indexSelectedRed);
+        }
+
+        if (neighbourCells.includes(index)) {
+          this.gamePlay.selectCell(index, 'green'); 
+          this.gamePlay.setCursor(cursors.pointer);
+        } else {
+          this.gamePlay.setCursor(cursors.notallowed);
+        }
+        
+      } else {
+        this.gamePlay.setCursor(cursors.notallowed);
+      }
     }
     // TODO: react to mouse enter
   }
@@ -124,9 +196,133 @@ export default class GameController {
       }
     }
 
-    const userPositions = arrayPosition.map((item) => item.slice(0, 2)).flat();
-    const enemyPositions = arrayPosition.map((item) => item.slice(-2)).flat();
+    const userPositions = arrayPosition.map((item) => item.slice(0, 4)).flat();  // todo не забыть исправить с 4 на 2
+    const enemyPositions = arrayPosition.map((item) => item.slice(-4)).flat();  // todo не забыть исправить с 4 на 2
 
     return [userPositions, enemyPositions];
+  }
+  
+  getNeighbourCells(index, distance) {
+    const row = Math.floor(index / this.gamePlay.boardSize);
+    const col = index % this.gamePlay.boardSize;
+  
+    const neighbours = [];      
+    
+    for (let i = 1; i <= distance; i++) {
+      // Клетки вправо
+      if (col + i < this.gamePlay.boardSize) {  
+        neighbours.push(index + i);
+      }
+      
+      // Клетки влево
+      if (col - i >= 0) {
+        neighbours.push(index - i);
+      }
+
+      // Клетки вверх
+      if (row - i >= 0) {
+        neighbours.push(index - this.gamePlay.boardSize * i);
+      }
+
+      // Клетки вниз
+      if (row + i < this.gamePlay.boardSize) {
+        neighbours.push(index + this.gamePlay.boardSize * i);
+      }
+
+      // Диагональ вправо-вверх
+      if (col + i < this.gamePlay.boardSize && row - i >= 0) {
+        neighbours.push(index - this.gamePlay.boardSize * i + i);
+      }
+
+      // Диагональ вправо-вниз
+      if (col + i < this.gamePlay.boardSize && row + i < this.gamePlay.boardSize) {
+        neighbours.push(index + this.gamePlay.boardSize * i + i);
+      }
+
+      // Диагональ влево-вверх
+      if (col - i >= 0 && row - i >= 0) {
+        neighbours.push(index - this.gamePlay.boardSize * i - i);
+      }
+
+      // Диагональ влево-вниз
+      if (col - i >= 0 && row + i < this.gamePlay.boardSize) {
+        neighbours.push(index + this.gamePlay.boardSize * i - i);
+      }
+    }
+
+    return neighbours;
+  }
+
+  getNeighbourCellsAttack(index, distance) {
+    const row = Math.floor(index / 8);
+  
+    const neighbours = [];     
+    const temp = [index];
+    
+    for (let i = 1; i <= distance; i++) {
+      // Клетки вверх
+      if (row - i >= 0) {
+        neighbours.push(index - 8 * i);
+        temp.push(index - 8 * i);
+      }
+
+      // Клетки вниз
+      if (row + i < 8) {
+        neighbours.push(index + 8 * i);
+        temp.push(index + 8 * i);
+      }
+    }
+
+    temp.forEach((el) => {
+      const col = el % 8;
+
+      for (let i = 1; i <= distance; i++) {
+        // Клетки вправо
+        if (col + i < 8) {
+          neighbours.push(el + i);
+        }
+        
+        // Клетки влево
+        if (col - i >= 0) {
+          neighbours.push(el - i);
+        }
+      }
+    })
+
+    return neighbours;
+  }
+
+  getDistanceMove(characterType) {
+    const distanceMove = [
+      ['Bowman', 2],
+      ['Swordsman', 4],
+      ['Magician', 1],
+      ['Vampire', 2],
+      ['Undead', 4],
+      ['Daemon', 1],
+    ];
+  
+    for (const [type, step] of distanceMove) {
+      if (type === characterType) {
+        return step;
+      }
+    }
+  }
+
+  getDistanceAttack(characterType) {
+    const distanceAttack = [
+      ['Bowman', 2],
+      ['Swordsman', 1],
+      ['Magician', 4],
+      ['Vampire', 2],
+      ['Undead', 1],
+      ['Daemon', 4],
+    ];
+  
+    for (const [type, step] of distanceAttack) {
+      if (type === characterType) {
+        return step;
+      }
+    }
   }
 }
