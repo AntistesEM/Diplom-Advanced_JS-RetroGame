@@ -460,24 +460,35 @@ export default class GameController {
    * @returns {obj} - содержащий {character: Vampire, position: 47} 
    */
   positionedCharacters(positions, team) {
-    let arrayPositions = [];
+    // console.log('positions:', positions)
+    let arrayPositionsTeam = [];
+    const arrayPositions = [...positions].sort(() => Math.random() - 0.5);
+    // console.log('arrayPositions:', arrayPositions)
+
+    while (arrayPositionsTeam.length !== this.countTeam) {      
+      const index = Math.floor(Math.random() * arrayPositions.length);
+      // console.log('index:', index);
+      const pos = arrayPositions[index];
+      // console.log('pos:', pos);
+
   
-    while (arrayPositions.length !== this.countTeam) {      
-      const index = Math.floor(Math.random() * positions.length);
-      const pos = positions[index];
-  
-      if (!arrayPositions.includes(pos)) {
-        arrayPositions.push(pos);  
+      if (!arrayPositionsTeam.includes(pos)) {
+        arrayPositionsTeam.push(pos);
       }
     }
+    console.log('arrayPositionsTeam:', arrayPositionsTeam);
 
-    const positionedCharacters = team.characters.map((character, index) => {
-      const position = arrayPositions[index];
+    const positionedCharactersTemp = team.characters.map((character, index) => {
+      const position = arrayPositionsTeam[index];
+      // console.log('position:', position);
+      console.log('new PositionedCharacter:', new PositionedCharacter(character, position));
 
       return new PositionedCharacter(character, position);
     });
+    console.log('positionedCharactersTemp:', positionedCharactersTemp);
+    console.log('-----------------------------------------');
   
-    return positionedCharacters;
+    return positionedCharactersTemp;
   }
   
   /**
