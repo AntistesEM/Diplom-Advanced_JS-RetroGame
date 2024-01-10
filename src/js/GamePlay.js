@@ -69,7 +69,9 @@ export default class GamePlay {
    * @param positions array of PositionedCharacter objects
    */
   redrawPositions(positions) {
+    // console.log('this.cells ==', this.cells);
     for (const cell of this.cells) {
+      // console.log('cell ===', cell);
       cell.innerHTML = '';
     }
 
@@ -214,7 +216,6 @@ export default class GamePlay {
       damageEl.textContent = damage;
       damageEl.classList.add('damage');
       cell.appendChild(damageEl);
-
       damageEl.addEventListener('animationend', () => {
         cell.removeChild(damageEl);
         resolve();

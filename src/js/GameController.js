@@ -16,28 +16,74 @@ export default class GameController {
   constructor(gamePlay, stateService) {
     this.gamePlay = gamePlay;
     this.stateService = stateService;
+    this.countTeam = 0;
     this.maxLevel = 4;
     this.userTypes = [Bowman, Swordsman, Magician];
     this.enemyTypes = [Vampire, Undead, Daemon];
     this.userTeam = [];
     this.enemyTeam = [];
     [this.userPositions, this.enemyPositions] = this.arrayPosition();
+    this.positionedCharactersUser = [];
     this.positionedCharactersAll = [];
     this.indexSelectedGreen = -1;
     this.indexSelectedYellow = -1;
     this.indexSelectedRed = -1;
+    this.currentThemeIndex = 0;
   }
 
   init() {
-    const countTeam = Math.floor(Math.random() * 5) + 1; // случайное количество героев от 1 до 6
-    this.userTeam = generateTeam(this.userTypes, this.maxLevel, countTeam); // команда игрока
-    this.enemyTeam = generateTeam(this.enemyTypes, this.maxLevel, countTeam); // команда противника    
-    const positionedCharactersUser = this.positionedCharacters(this.userPositions, this.userTeam, countTeam); // массив объектов PositionedCharacter для игрока
-    const positionedCharactersEnemy = this.positionedCharacters(this.enemyPositions, this.enemyTeam, countTeam); // массив объектов PositionedCharacter для противника
+    if (this.countTeam === 0) {
+      this.countTeam = 2 // Math.floor(Math.random() * 5) + 1; // случайное количество героев от 1 до 6
     
-    this.positionedCharactersAll = positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+      this.userTeam = generateTeam(this.userTypes, this.maxLevel, this.countTeam); // команда игрока
 
-    this.gamePlay.drawUi(themes.prairie); // отрисовка поля
+      this.enemyTeam = generateTeam(this.enemyTypes, this.maxLevel, this.countTeam); // команда противника
+
+      this.positionedCharactersUser = this.positionedCharacters(this.userPositions, this.userTeam); // массив объектов PositionedCharacter для игрока
+    
+      const positionedCharactersEnemy = this.positionedCharacters(this.enemyPositions, this.enemyTeam); // массив объектов PositionedCharacter для противника
+    
+      this.positionedCharactersAll = this.positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+
+      // увеличиваем характеристики всех персонажей в зависимости от уровня
+      this.positionedCharactersAll.forEach((pos) => {
+        if (pos.character.level > 1) {
+          const level = pos.character.level;
+          pos.character.level = 1;
+
+          for (let index = 0; index < level; index++) {
+            this.levelUp(pos.character);          
+          }
+        }
+      })
+    } else {
+      this.enemyTeam = generateTeam(this.enemyTypes, this.maxLevel, this.countTeam); // команда противника
+
+      this.positionedCharactersUser = this.positionedCharacters(this.userPositions, this.userTeam); // массив объектов PositionedCharacter для игрока
+      
+      const positionedCharactersEnemy = this.positionedCharacters(this.enemyPositions, this.enemyTeam); // массив объектов PositionedCharacter для противника
+
+      // увеличиваем характеристики персонажей противника в зависимости от уровня
+      positionedCharactersEnemy.forEach((pos) => {
+        if (pos.character.level > 1) {
+          const level = pos.character.level;
+          pos.character.level = 1;
+          for (let index = 0; index < level; index++) {
+            this.levelUp(pos.character);          
+          }
+        }
+      })
+    
+      this.positionedCharactersAll = this.positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+      
+    }
+
+    if (this.currentThemeIndex >= Object.values(themes).length) {
+      this.currentThemeIndex = 0;
+    }
+
+    const currentTheme = Object.values(themes)[this.currentThemeIndex];
+    this.gamePlay.drawUi(currentTheme); // отрисовка поля
     this.gamePlay.redrawPositions(this.positionedCharactersAll); // отрисовка героев на поле
 
     this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
@@ -70,10 +116,10 @@ export default class GameController {
 
           this.gamePlay.showDamage(index, damage)
             .then(() => {
+              this.removeCharacter(target, index);
               this.gamePlay.redrawPositions(this.positionedCharactersAll);
-              console.log('comp 1');  // ! удалить
               this.computerAction();
-            });          
+            });
           
         } else {
           GamePlay.showError('Вы не можете атаковать из данной позиции!');
@@ -90,9 +136,68 @@ export default class GameController {
       this.gamePlay.redrawPositions(this.positionedCharactersAll);
       this.gamePlay.deselectCell(this.indexSelectedYellow);
       this.gamePlay.selectCell(index);
-      console.log('comp 2');  // ! удалить
       this.computerAction();
     }
+  }
+
+  /**
+   * Метод для проверки наличия персонажей в командах
+   */
+  checkTeam() {
+    const enemyArr = this.enemyTeam.characters.map((el) => el.constructor.name)
+    const userArr = this.userTeam.characters.map((el) => el.constructor.name)
+    let enemy = 0;
+    let user = 0;
+
+    this.positionedCharactersAll.forEach((pos) => {
+      if (enemyArr.includes(pos.character.constructor.name)) {
+        enemy = enemy + 1;
+      } else if (userArr.includes(pos.character.constructor.name)) {
+        user = user + 1;
+      }
+    })
+
+    if (enemy === 0) {
+      GamePlay.showMessage('Вы выиграли');
+      this.countTeam = this.userTeam.characters.length;
+      this.currentThemeIndex++;
+
+      this.userTeam.characters.forEach((char) => {
+
+        if (char.health <= 0) {
+          char.health = 10;
+        }
+
+        this.levelUp(char)
+      })
+      
+      this.clearCellListeners();
+      this.init();
+      
+    } else if (user === 0) {
+      GamePlay.showMessage('Вы проиграли');
+      this.countTeam = 0;
+      this.clearCellListeners();
+      this.init();
+    }
+  }
+
+  /**
+   * Метод для увеличения уровня и характеристик
+   * @param {obj} character - персонаж
+   */
+  levelUp(character) {
+    character.attack = Math.max(character.attack, character.attack * (80 + character.health) / 100);
+    character.defence = Math.max(character.defence, character.defence * (80 + character.health) / 100);
+
+    if (character.health > 20) {
+      character.level++;
+    }    
+
+    character.health = character.health + 80;
+      if (character.health > 100) {
+        character.health = 100;
+      }
   }
 
   onCellEnter(index) {
@@ -127,7 +232,7 @@ export default class GameController {
           }
         }        
       }      
-    } else {
+    } else {  // !!!!!!!!!!!!! PROBLEM  !!!!!!!!!!!!!!!
       if (this.indexSelectedYellow !== -1) {
         let neighbourCells = this.getNeighbourCells(this.indexSelectedYellow, this.getDistanceMove(this.characterType(this.indexSelectedYellow)));
 
@@ -204,6 +309,7 @@ export default class GameController {
 
           this.gamePlay.showDamage(user, damage)
             .then(() => {
+              this.removeCharacter(target, user);
               this.gamePlay.redrawPositions(this.positionedCharactersAll);
             });
           isAttackExecuted = true;
@@ -220,7 +326,7 @@ export default class GameController {
     }
 
     // если не было атаки, то определяем куда двигаться
-    if (!isAttackExecuted) {
+    if (!isAttackExecuted && pair) {
       const path = aStarSearch(pair[0], pair[1]);  // получаем путь
       const enemy = this.positionedCharactersAll.find((char) => char.position === pair[0]);
       let flag = false;
@@ -230,7 +336,7 @@ export default class GameController {
         const distanceAtatack = this.getDistanceAttack(self.characterType(pair[0]));
         const arrNeighbourCellsAttack = this.getNeighbourCellsAttack(iterator, distanceAtatack);
 
-        if (arrNeighbourCellsAttack.includes(pair[1])) {
+        if (arrNeighbourCellsAttack.includes(pair[1]) && this.gamePlay.cells[iterator].children.length === 0) {
           flag = true;
           enemy.position = iterator;
           break;
@@ -243,7 +349,7 @@ export default class GameController {
         const arrNeighbourCells = this.getNeighbourCells(pair[0], distanceMove);
 
         for (const iterator of path.slice(1, -1)) {
-          if (arrNeighbourCells.includes(iterator)) {
+          if (arrNeighbourCells.includes(iterator) && this.gamePlay.cells[iterator].children.length === 0) {
             enemy.position = iterator;
             break;            
           }
@@ -251,6 +357,7 @@ export default class GameController {
       }
 
       this.gamePlay.redrawPositions(this.positionedCharactersAll);
+
     }
 
     /** 
@@ -346,24 +453,52 @@ export default class GameController {
     return this.positionedCharactersAll.find((item) => item.position === index).character.constructor.name;
   }
   
-  positionedCharacters(positions, team, countTeam) {
+  /**
+   * Метод определения начальной позиции персонажей
+   * @param {obj} positions - массив возможных позиций
+   * @param {obj} team  - команда персонажей
+   * @returns {obj} - содержащий {character: Vampire, position: 47} 
+   */
+  positionedCharacters(positions, team) {
     let arrayPositions = [];
   
-    while (arrayPositions.length !== countTeam) {      
+    while (arrayPositions.length !== this.countTeam) {      
       const index = Math.floor(Math.random() * positions.length);
-      const position = positions[index];
+      const pos = positions[index];
   
-      if (!arrayPositions.includes(position)) {
-        arrayPositions.push(positions[index]);  
+      if (!arrayPositions.includes(pos)) {
+        arrayPositions.push(pos);  
       }
     }
-  
+
     const positionedCharacters = team.characters.map((character, index) => {
       const position = arrayPositions[index];
+
       return new PositionedCharacter(character, position);
     });
   
     return positionedCharacters;
+  }
+  
+  /**
+   * Метод для удаления погибших персонажей
+   * @param {obj} target - атакуемый персонаж в формате positionedCharacters
+   * @param {number} index - его положение(индекс)
+   */
+  removeCharacter(target, index) {
+    if (target.character.health <= 0) {
+      this.positionedCharactersAll.forEach((el, ind) => {
+        if (el.position === index) {
+          this.positionedCharactersAll.splice(ind, 1);
+          this.gamePlay.cells[index].title = '';
+          if (this.indexSelectedYellow === index) {
+            this.gamePlay.deselectCell(this.indexSelectedYellow);
+          }
+        }
+      })      
+
+      this.checkTeam();
+    }
   }
 
   arrayPosition() {
@@ -505,5 +640,10 @@ export default class GameController {
         return step;
       }
     }
+  }
+
+  clearCellListeners() {
+    this.gamePlay.cellClickListeners = [];
+    this.gamePlay.cellEnterListeners = [];
   }
 }
