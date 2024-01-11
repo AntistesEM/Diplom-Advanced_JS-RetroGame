@@ -7,8 +7,8 @@ export default class GameState {
   }
   
 }
-
-// команды и их позиции
+// кто ходитъ this.nextStep = true;
+// команды и их позиции this.positionedCharactersAll
 // баллы
-// поле какое
-// активный персонаж
+// поле какое this.currentThemeIndex
+// активный персонаж this.indexSelectedYellow

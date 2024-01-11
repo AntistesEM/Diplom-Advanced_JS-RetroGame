@@ -12,7 +12,6 @@ export default class PositionedCharacter {
 
     this.character = character;
     this.position = position;
-    console.log('this.character==', this.character, 'this.position==', this.position);
     
   }
 }

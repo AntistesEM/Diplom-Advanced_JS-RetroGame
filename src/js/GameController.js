@@ -29,9 +29,18 @@ export default class GameController {
     this.indexSelectedYellow = -1;
     this.indexSelectedRed = -1;
     this.currentThemeIndex = 0;
+    this.nextStep = true;
+    this.gameWin = false;
+    this.gameOver = false;
   }
 
   init() {
+    if (this.currentThemeIndex >= Object.values(themes).length) {
+      this.currentThemeIndex = 0;
+      this.gameOver = true;
+      GamePlay.showMessage('Игра закончена! Запустите новую игру.')
+    } 
+    
     if (this.countTeam === 0) {
       this.countTeam = 2 // Math.floor(Math.random() * 5) + 1; // случайное количество героев от 1 до 6
     
@@ -43,7 +52,9 @@ export default class GameController {
     
       const positionedCharactersEnemy = this.positionedCharacters(this.enemyPositions, this.enemyTeam); // массив объектов PositionedCharacter для противника
     
-      this.positionedCharactersAll = this.positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+      if (!this.gameOver) {
+        this.positionedCharactersAll = this.positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+      }
 
       // увеличиваем характеристики всех персонажей в зависимости от уровня
       this.positionedCharactersAll.forEach((pos) => {
@@ -51,7 +62,7 @@ export default class GameController {
           const level = pos.character.level;
           pos.character.level = 1;
 
-          for (let index = 0; index < level; index++) {
+          for (let index = 0; index < level - 1; index++) {
             this.levelUp(pos.character);          
           }
         }
@@ -73,21 +84,19 @@ export default class GameController {
           }
         }
       })
-    
-      this.positionedCharactersAll = this.positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
-      
-    }
 
-    if (this.currentThemeIndex >= Object.values(themes).length) {
-      this.currentThemeIndex = 0;
+      if (!this.gameOver) {
+        this.positionedCharactersAll = this.positionedCharactersUser.concat(positionedCharactersEnemy); // объединение массивов объектов PositionedCharacter
+      }
     }
 
     const currentTheme = Object.values(themes)[this.currentThemeIndex];
     this.gamePlay.drawUi(currentTheme); // отрисовка поля
-    this.gamePlay.redrawPositions(this.positionedCharactersAll); // отрисовка героев на поле
-
-    this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
-    this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
+    if (!this.gameOver) {
+      this.gamePlay.redrawPositions(this.positionedCharactersAll); // отрисовка героев на поле
+      this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
+      this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
+    } 
 
     // TODO: add event listeners to gamePlay events
     // TODO: load saved stated from stateService
@@ -95,48 +104,60 @@ export default class GameController {
 
   onCellClick(index) {
     // TODO: react to click 
-    const foundCharacter = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedYellow);
-    
-    if (this.gamePlay.cells[index].children.length !== 0) {
-      this.indexSelectedRed = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-red'));
+    if (!this.gameOver) {
+      const foundCharacter = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedYellow);
+      
+      if (this.gamePlay.cells[index].children.length !== 0) {
+        this.indexSelectedRed = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-red'));
 
-      if (this.userTypes.find((item) => item.name === this.characterType(index))) {
+        if (this.userTypes.find((item) => item.name === this.characterType(index))) {
 
-        if (this.indexSelectedYellow !== -1) {
-          this.gamePlay.deselectCell(this.indexSelectedYellow);
-        }
+          if (this.indexSelectedYellow !== -1) {
+            this.gamePlay.deselectCell(this.indexSelectedYellow);
+          }
 
-        this.gamePlay.selectCell(index);
-      } else if (this.indexSelectedYellow !== -1) {
-        if (this.indexSelectedRed !== -1) {
-          const target = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedRed);
-          const damage = Math.max(foundCharacter.character.attack - target.character.defence, foundCharacter.character.attack * 0.1);
+          this.gamePlay.selectCell(index);
+        } else if (this.indexSelectedYellow !== -1) {
+          if (this.indexSelectedRed !== -1) {
+            const target = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedRed);
+            const damage = Math.round(Math.max(foundCharacter.character.attack - target.character.defence, foundCharacter.character.attack * 0.1));
 
-          target.character.health = target.character.health - damage;
+            target.character.health = target.character.health - damage;
 
-          this.gamePlay.showDamage(index, damage)
-            .then(() => {
-              this.removeCharacter(target, index);
-              this.gamePlay.redrawPositions(this.positionedCharactersAll);
-              this.computerAction();
-            });
-          
+            this.gamePlay.showDamage(index, damage)
+              .then(() => {
+                this.removeCharacter(target, index);
+                this.gamePlay.redrawPositions(this.positionedCharactersAll);
+
+                // если игрок победил 
+                if (this.gameWin) {
+                  this.nextStep = true;
+                  this.gameWin = false;
+                } else {
+                  this.nextStep = false;
+                }
+
+                this.computerAction();
+              });
+            
+          } else {
+            GamePlay.showError('Вы не можете атаковать из данной позиции!');
+          }
         } else {
-          GamePlay.showError('Вы не можете атаковать из данной позиции!');
+          GamePlay.showError('Это не ваш персонаж!');
         }
-      } else {
-        GamePlay.showError('Это не ваш персонаж!');
-      }
-    } else if (this.indexSelectedYellow !== -1 && this.gamePlay.boardEl.style.cursor === 'pointer') {
+      } else if (this.indexSelectedYellow !== -1 && this.gamePlay.boardEl.style.cursor === 'pointer') {
 
-      if (foundCharacter) {
-        foundCharacter.position = index;
-      }
+        if (foundCharacter) {
+          foundCharacter.position = index;
+        }
 
-      this.gamePlay.redrawPositions(this.positionedCharactersAll);
-      this.gamePlay.deselectCell(this.indexSelectedYellow);
-      this.gamePlay.selectCell(index);
-      this.computerAction();
+        this.gamePlay.redrawPositions(this.positionedCharactersAll);
+        this.gamePlay.deselectCell(this.indexSelectedYellow);
+        this.gamePlay.selectCell(index);
+        this.nextStep = false;
+        this.computerAction();
+      }
     }
   }
 
@@ -158,9 +179,13 @@ export default class GameController {
     })
 
     if (enemy === 0) {
-      GamePlay.showMessage('Вы выиграли');
-      this.countTeam = this.userTeam.characters.length;
       this.currentThemeIndex++;
+
+      if (this.currentThemeIndex < Object.values(themes).length) {
+        GamePlay.showMessage('Вы выиграли!');
+      }
+      
+      this.countTeam = this.userTeam.characters.length;
 
       this.userTeam.characters.forEach((char) => {
 
@@ -170,13 +195,16 @@ export default class GameController {
 
         this.levelUp(char)
       })
+      this.gameWin = true;
       
       this.clearCellListeners();
       this.init();
       
     } else if (user === 0) {
-      GamePlay.showMessage('Вы проиграли');
+      GamePlay.showMessage('Вы проиграли!');
       this.countTeam = 0;
+      this.gameOver = true;
+      this.currentThemeIndex = 0;
       this.clearCellListeners();
       this.init();
     }
@@ -201,56 +229,58 @@ export default class GameController {
   }
 
   onCellEnter(index) {
-    this.indexSelectedGreen = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-green'));
-    this.indexSelectedYellow = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-yellow'));
-    this.indexSelectedRed = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-red'));
+    if (!this.gameOver) {
+      this.indexSelectedGreen = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-green'));
+      this.indexSelectedYellow = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-yellow'));
+      this.indexSelectedRed = this.gamePlay.cells.findIndex((item) => item.classList.contains('selected-red'));
 
-    if (this.gamePlay.cells[index].children.length !== 0) {
-      const character = this.positionedCharactersAll.find((item) => item.position === index);
-      const tooltip = GameController.characterInfo(character.character);
-
-      if (this.indexSelectedGreen !== -1) {
-        this.gamePlay.deselectCell(this.indexSelectedGreen);
-      } else if (this.indexSelectedRed !== -1) {        
-        this.gamePlay.deselectCell(this.indexSelectedRed);
-      }
-
-      this.gamePlay.showCellTooltip(tooltip, index);  
-
-      if (this.userTypes.find((item) => item.name === this.characterType(index))) {
-        this.gamePlay.setCursor(cursors.pointer);
-      } else if (this.enemyTypes.find((item) => item.name === this.characterType(index))) {
-
-        if (this.indexSelectedYellow !== -1) {
-          const neighbourCellsAttack = this.getNeighbourCellsAttack(this.indexSelectedYellow, this.getDistanceAttack(this.characterType(this.indexSelectedYellow)));
-
-          if (neighbourCellsAttack.includes(index)) {
-            this.gamePlay.selectCell(index, 'red'); 
-            this.gamePlay.setCursor(cursors.crosshair);
-          } else {
-            this.gamePlay.setCursor(cursors.notallowed);
-          }
-        }        
-      }      
-    } else {  // !!!!!!!!!!!!! PROBLEM  !!!!!!!!!!!!!!!
-      if (this.indexSelectedYellow !== -1) {
-        let neighbourCells = this.getNeighbourCells(this.indexSelectedYellow, this.getDistanceMove(this.characterType(this.indexSelectedYellow)));
+      if (this.gamePlay.cells[index].children.length !== 0) {
+        const character = this.positionedCharactersAll.find((item) => item.position === index);
+        const tooltip = GameController.characterInfo(character.character);
 
         if (this.indexSelectedGreen !== -1) {
           this.gamePlay.deselectCell(this.indexSelectedGreen);
-        } else if (this.indexSelectedRed !== -1) {        
+        } else if (this.indexSelectedRed !== -1) {
           this.gamePlay.deselectCell(this.indexSelectedRed);
         }
 
-        if (neighbourCells.includes(index)) {
-          this.gamePlay.selectCell(index, 'green'); 
+        this.gamePlay.showCellTooltip(tooltip, index);
+
+        if (this.userTypes.find((item) => item.name === this.characterType(index))) {
           this.gamePlay.setCursor(cursors.pointer);
+        } else if (this.enemyTypes.find((item) => item.name === this.characterType(index))) {
+
+          if (this.indexSelectedYellow !== -1) {
+            const neighbourCellsAttack = this.getNeighbourCellsAttack(this.indexSelectedYellow, this.getDistanceAttack(this.characterType(this.indexSelectedYellow)));
+
+            if (neighbourCellsAttack.includes(index)) {
+              this.gamePlay.selectCell(index, 'red');
+              this.gamePlay.setCursor(cursors.crosshair);
+            } else {
+              this.gamePlay.setCursor(cursors.notallowed);
+            }
+          }
+        }
+      } else {
+        if (this.indexSelectedYellow !== -1) {
+          let neighbourCells = this.getNeighbourCells(this.indexSelectedYellow, this.getDistanceMove(this.characterType(this.indexSelectedYellow)));
+
+          if (this.indexSelectedGreen !== -1) {
+            this.gamePlay.deselectCell(this.indexSelectedGreen);
+          } else if (this.indexSelectedRed !== -1) {
+            this.gamePlay.deselectCell(this.indexSelectedRed);
+          }
+
+          if (neighbourCells.includes(index)) {
+            this.gamePlay.selectCell(index, 'green');
+            this.gamePlay.setCursor(cursors.pointer);
+          } else {
+            this.gamePlay.setCursor(cursors.notallowed);
+          }
+          
         } else {
           this.gamePlay.setCursor(cursors.notallowed);
         }
-        
-      } else {
-        this.gamePlay.setCursor(cursors.notallowed);
       }
     }
     // TODO: react to mouse enter
@@ -270,94 +300,95 @@ export default class GameController {
   */
   computerAction() {
     const self = this;  // ! чтоб использовать метод класса в функции, так как теряется this
+    if (!this.nextStep) {
+      // Получили индексы всех персонажей
+      const listIndexUser = []
+      const listIndexEnemy = []
 
-    // Получили индексы всех персонажей
-    const listIndexUser = []
-    const listIndexEnemy = []
+      for (const iterator of this.positionedCharactersAll) {
+        for (const userCharacter of this.userTeam.characters) {
+          if (userCharacter.constructor.name === iterator.character.constructor.name && !listIndexUser.includes(iterator.position)) {
+            listIndexUser.push(iterator.position)
+          }
+        }
 
-    for (const iterator of this.positionedCharactersAll) {
-      for (const userCharacter of this.userTeam.characters) {
-        if (userCharacter.constructor.name === iterator.character.constructor.name && !listIndexUser.includes(iterator.position)) {
-          listIndexUser.push(iterator.position)
-        }        
-      }
-
-      for (const enemyCharacter of this.enemyTeam.characters) {
-        if (enemyCharacter.constructor.name === iterator.character.constructor.name && !listIndexEnemy.includes(iterator.position)) {
-          listIndexEnemy.push(iterator.position)
-        }        
-      }
-    }
-
-    // определяем атакуем или движемся
-    let isAttackExecuted = false;
-    let minDistance = Infinity;
-    let min;
-    let pair;
-
-    // атакуем или высчитываем ближайших противников
-    outerLoop: for (const enemy of listIndexEnemy) {
-      const NeighbourCellsAttack = this.getNeighbourCellsAttack(enemy, this.getDistanceAttack(this.characterType(enemy)))
-
-      for (const user of listIndexUser) {
-        if (NeighbourCellsAttack.includes(user)) {
-          const attacking = this.positionedCharactersAll.find((character) => character.position === enemy);
-          const target = this.positionedCharactersAll.find((character) => character.position === user);
-          const damage = Math.max(attacking.character.attack - target.character.defence, attacking.character.attack * 0.1);
-
-          target.character.health = target.character.health - damage;
-
-          this.gamePlay.showDamage(user, damage)
-            .then(() => {
-              this.removeCharacter(target, user);
-              this.gamePlay.redrawPositions(this.positionedCharactersAll);
-            });
-          isAttackExecuted = true;
-          break outerLoop;
-
-        } else {
-          min = calculateDistance(enemy, user);
-          if (min < minDistance) {
-            minDistance = min;
-            pair = [enemy, user]
+        for (const enemyCharacter of this.enemyTeam.characters) {
+          if (enemyCharacter.constructor.name === iterator.character.constructor.name && !listIndexEnemy.includes(iterator.position)) {
+            listIndexEnemy.push(iterator.position)
           }
         }
       }
-    }
 
-    // если не было атаки, то определяем куда двигаться
-    if (!isAttackExecuted && pair) {
-      const path = aStarSearch(pair[0], pair[1]);  // получаем путь
-      const enemy = this.positionedCharactersAll.find((char) => char.position === pair[0]);
-      let flag = false;
+      // определяем атакуем или движемся
+      let isAttackExecuted = false;
+      let minDistance = Infinity;
+      let min;
+      let pair;
 
-      // если можно подобраться на дистанцию атаки
-      for (const iterator of path.slice(1, -1)) {
-        const distanceAtatack = this.getDistanceAttack(self.characterType(pair[0]));
-        const arrNeighbourCellsAttack = this.getNeighbourCellsAttack(iterator, distanceAtatack);
+      // атакуем или высчитываем ближайших противников
+      outerLoop: for (const enemy of listIndexEnemy) {
+        const NeighbourCellsAttack = this.getNeighbourCellsAttack(enemy, this.getDistanceAttack(this.characterType(enemy)))
 
-        if (arrNeighbourCellsAttack.includes(pair[1]) && this.gamePlay.cells[iterator].children.length === 0) {
-          flag = true;
-          enemy.position = iterator;
-          break;
+        for (const user of listIndexUser) {
+          if (NeighbourCellsAttack.includes(user)) {
+            const attacking = this.positionedCharactersAll.find((character) => character.position === enemy);
+            const target = this.positionedCharactersAll.find((character) => character.position === user);
+            const damage = Math.max(attacking.character.attack - target.character.defence, attacking.character.attack * 0.1);
+
+            target.character.health = target.character.health - damage;
+
+            this.gamePlay.showDamage(user, damage)
+              .then(() => {
+                this.removeCharacter(target, user);
+                this.gamePlay.redrawPositions(this.positionedCharactersAll);
+              });
+            isAttackExecuted = true;
+            break outerLoop;
+
+          } else {
+            min = calculateDistance(enemy, user);
+            if (min < minDistance) {
+              minDistance = min;
+              pair = [enemy, user]
+            }
+          }
         }
       }
 
-      // если нет, то просто двигаемся максимально близко к цели
-      if (!flag) {        
-        const distanceMove = this.getDistanceMove(self.characterType(pair[0]));
-        const arrNeighbourCells = this.getNeighbourCells(pair[0], distanceMove);
+      // если не было атаки, то определяем куда двигаться
+      if (!isAttackExecuted && pair) {
+        const path = aStarSearch(pair[0], pair[1]);  // получаем путь
+        const enemy = this.positionedCharactersAll.find((char) => char.position === pair[0]);
+        let flag = false;
 
+        // если можно подобраться на дистанцию атаки
         for (const iterator of path.slice(1, -1)) {
-          if (arrNeighbourCells.includes(iterator) && this.gamePlay.cells[iterator].children.length === 0) {
+          const distanceAtatack = this.getDistanceAttack(self.characterType(pair[0]));
+          const arrNeighbourCellsAttack = this.getNeighbourCellsAttack(iterator, distanceAtatack);
+
+          if (arrNeighbourCellsAttack.includes(pair[1]) && this.gamePlay.cells[iterator].children.length === 0) {
+            flag = true;
             enemy.position = iterator;
-            break;            
+            break;
           }
         }
+
+        // если нет, то просто двигаемся максимально близко к цели
+        if (!flag) {
+          const distanceMove = this.getDistanceMove(self.characterType(pair[0]));
+          const arrNeighbourCells = this.getNeighbourCells(pair[0], distanceMove);
+
+          for (const iterator of path.slice(1, -1)) {
+            if (arrNeighbourCells.includes(iterator) && this.gamePlay.cells[iterator].children.length === 0) {
+              enemy.position = iterator;
+              break;
+            }
+          }
+        }
+        this.nextStep = true;
+        this.gamePlay.redrawPositions(this.positionedCharactersAll);
+
       }
-
-      this.gamePlay.redrawPositions(this.positionedCharactersAll);
-
     }
 
     /** 
@@ -454,39 +485,21 @@ export default class GameController {
   }
   
   /**
-   * Метод определения начальной позиции персонажей
+   * Метод определения начальной позиции персонажей:
+   * - positions сортируется случайным образом в arrayPositions
+   * - positionedCharactersTemp: берутся первые две позиции из arrayPositions 
    * @param {obj} positions - массив возможных позиций
    * @param {obj} team  - команда персонажей
    * @returns {obj} - содержащий {character: Vampire, position: 47} 
    */
   positionedCharacters(positions, team) {
-    // console.log('positions:', positions)
-    let arrayPositionsTeam = [];
     const arrayPositions = [...positions].sort(() => Math.random() - 0.5);
-    // console.log('arrayPositions:', arrayPositions)
-
-    while (arrayPositionsTeam.length !== this.countTeam) {      
-      const index = Math.floor(Math.random() * arrayPositions.length);
-      // console.log('index:', index);
-      const pos = arrayPositions[index];
-      // console.log('pos:', pos);
-
-  
-      if (!arrayPositionsTeam.includes(pos)) {
-        arrayPositionsTeam.push(pos);
-      }
-    }
-    console.log('arrayPositionsTeam:', arrayPositionsTeam);
 
     const positionedCharactersTemp = team.characters.map((character, index) => {
-      const position = arrayPositionsTeam[index];
-      // console.log('position:', position);
-      console.log('new PositionedCharacter:', new PositionedCharacter(character, position));
+      const position = arrayPositions[index];
 
       return new PositionedCharacter(character, position);
     });
-    console.log('positionedCharactersTemp:', positionedCharactersTemp);
-    console.log('-----------------------------------------');
   
     return positionedCharactersTemp;
   }
