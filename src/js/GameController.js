@@ -29,20 +29,23 @@ export default class GameController {
     this.indexSelectedYellow = -1;
     this.indexSelectedRed = -1;
     this.currentThemeIndex = 0;
-    this.nextStep = true;
+    this.points = 0;
+    this.maxPoints = 0;  // HACK
+    this.nextStep = true;  // HACK
     this.gameWin = false;
     this.gameOver = false;
   }
 
-  init() {
+  init() { // OPTIMIZE: попробовать оптимизировать 
     if (this.currentThemeIndex >= Object.values(themes).length) {
       this.currentThemeIndex = 0;
       this.gameOver = true;
-      GamePlay.showMessage('Игра закончена! Запустите новую игру.')
+      GamePlay.showMessage(`Игра закончена! Вы набрали ${this.getPoints()} баллов. Запустите новую игру.`)
+      this.points = 0;
     } 
     
     if (this.countTeam === 0) {
-      this.countTeam = 2 // Math.floor(Math.random() * 5) + 1; // случайное количество героев от 1 до 6
+      this.countTeam = Math.floor(Math.random() * 5) + 1; // случайное количество героев от 1 до 6
     
       this.userTeam = generateTeam(this.userTypes, this.maxLevel, this.countTeam); // команда игрока
 
@@ -90,20 +93,21 @@ export default class GameController {
       }
     }
 
+    this.gamePlay.addNewGameListener(this.newGame.bind(this));
+    this.gamePlay.addSaveGameListener(this.saveGame.bind(this));
+    this.gamePlay.addLoadGameListener(this.loadGame.bind(this));
+
     const currentTheme = Object.values(themes)[this.currentThemeIndex];
     this.gamePlay.drawUi(currentTheme); // отрисовка поля
+
     if (!this.gameOver) {
       this.gamePlay.redrawPositions(this.positionedCharactersAll); // отрисовка героев на поле
       this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
       this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
-    } 
-
-    // TODO: add event listeners to gamePlay events
-    // TODO: load saved stated from stateService
+    }
   }
 
   onCellClick(index) {
-    // TODO: react to click 
     if (!this.gameOver) {
       const foundCharacter = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedYellow);
       
@@ -121,7 +125,7 @@ export default class GameController {
           if (this.indexSelectedRed !== -1) {
             const target = this.positionedCharactersAll.find((character) => character.position === this.indexSelectedRed);
             const damage = Math.round(Math.max(foundCharacter.character.attack - target.character.defence, foundCharacter.character.attack * 0.1));
-
+            this.points += damage;
             target.character.health = target.character.health - damage;
 
             this.gamePlay.showDamage(index, damage)
@@ -159,73 +163,6 @@ export default class GameController {
         this.computerAction();
       }
     }
-  }
-
-  /**
-   * Метод для проверки наличия персонажей в командах
-   */
-  checkTeam() {
-    const enemyArr = this.enemyTeam.characters.map((el) => el.constructor.name)
-    const userArr = this.userTeam.characters.map((el) => el.constructor.name)
-    let enemy = 0;
-    let user = 0;
-
-    this.positionedCharactersAll.forEach((pos) => {
-      if (enemyArr.includes(pos.character.constructor.name)) {
-        enemy = enemy + 1;
-      } else if (userArr.includes(pos.character.constructor.name)) {
-        user = user + 1;
-      }
-    })
-
-    if (enemy === 0) {
-      this.currentThemeIndex++;
-
-      if (this.currentThemeIndex < Object.values(themes).length) {
-        GamePlay.showMessage('Вы выиграли!');
-      }
-      
-      this.countTeam = this.userTeam.characters.length;
-
-      this.userTeam.characters.forEach((char) => {
-
-        if (char.health <= 0) {
-          char.health = 10;
-        }
-
-        this.levelUp(char)
-      })
-      this.gameWin = true;
-      
-      this.clearCellListeners();
-      this.init();
-      
-    } else if (user === 0) {
-      GamePlay.showMessage('Вы проиграли!');
-      this.countTeam = 0;
-      this.gameOver = true;
-      this.currentThemeIndex = 0;
-      this.clearCellListeners();
-      this.init();
-    }
-  }
-
-  /**
-   * Метод для увеличения уровня и характеристик
-   * @param {obj} character - персонаж
-   */
-  levelUp(character) {
-    character.attack = Math.max(character.attack, character.attack * (80 + character.health) / 100);
-    character.defence = Math.max(character.defence, character.defence * (80 + character.health) / 100);
-
-    if (character.health > 20) {
-      character.level++;
-    }    
-
-    character.health = character.health + 80;
-      if (character.health > 100) {
-        character.health = 100;
-      }
   }
 
   onCellEnter(index) {
@@ -283,10 +220,9 @@ export default class GameController {
         }
       }
     }
-    // TODO: react to mouse enter
   }
 
-  static characterInfo(character) {  // static чтоб использовать в тестах
+  static characterInfo(character) {  // NOTE: static чтоб использовать в тестах
     return `\u{1F396}${character.level} \u{2694}${character.attack} \u{1F6E1}${character.defence} \u{2764}${character.health}`;
   }
 
@@ -299,7 +235,7 @@ export default class GameController {
    * метод для реализации хода противника
   */
   computerAction() {
-    const self = this;  // ! чтоб использовать метод класса в функции, так как теряется this
+    const self = this;  // NOTE: чтоб использовать метод класса в функции, так как теряется this
     if (!this.nextStep) {
       // Получили индексы всех персонажей
       const listIndexUser = []
@@ -333,7 +269,7 @@ export default class GameController {
           if (NeighbourCellsAttack.includes(user)) {
             const attacking = this.positionedCharactersAll.find((character) => character.position === enemy);
             const target = this.positionedCharactersAll.find((character) => character.position === user);
-            const damage = Math.max(attacking.character.attack - target.character.defence, attacking.character.attack * 0.1);
+            const damage = Math.round(Math.max(attacking.character.attack - target.character.defence, attacking.character.attack * 0.1));
 
             target.character.health = target.character.health - damage;
 
@@ -395,6 +331,9 @@ export default class GameController {
      * Это функция, которая рассчитывает расстояние между двумя клетками 
      * на игровом поле. Она использует формулу Евклидового расстояния для
      * определения длины прямой линии между двумя точками.
+     * @param {number} start - индекс (положение) персонажа
+     * @param {number} end - индекс (положение) персонажа к которому идем
+     * @returns {number} - возвращает расстояние в виде числа
     */
     function calculateDistance(start, end) {
       const startX = start % 8;  // получаем координаты x для start
@@ -405,16 +344,19 @@ export default class GameController {
   
       // вычисление расстояния между начальной и конечной клетками, используя Евклидово расстояние
       const distance = Math.sqrt((startX - endX) ** 2 + (startY - endY) ** 2);
-  
+      
       return distance;
     }
 
     /**
-     * Это функция, которая выполняет поиск по алгоритму A*. 
+     * Это функция, которая выполняет поиск пути по алгоритму A*. 
      * Она инициализирует открытый и закрытый списки, 
      * создает начальный и конечный узлы, 
      * добавляет начальный узел в открытый список. 
      * Затем она входит в цикл, пока открытый список не пуст.
+     * @param {number} start - индекс (положение) персонажа
+     * @param {number} end - индекс (положение) персонажа к которому идем
+     * @returns {[number]} - возвращает путь в виде массива индексов клеток или null если путь не найден
     */
     function aStarSearch(start, end) {
       const openList = []; // список для открытых узлов
@@ -480,6 +422,11 @@ export default class GameController {
     }
   }
 
+  /**
+   * Метод для определения типа персонажа
+   * @param {number} index - индекс (положение) персонажа 
+   * @returns {string} - возвращает тип персонажа в виде строки 'Bowman'
+   */
   characterType(index) {
     return this.positionedCharactersAll.find((item) => item.position === index).character.constructor.name;
   }
@@ -519,12 +466,16 @@ export default class GameController {
             this.gamePlay.deselectCell(this.indexSelectedYellow);
           }
         }
-      })      
-
+      }) 
+      
       this.checkTeam();
     }
   }
 
+  /**
+   * Метод для получения массива индексов клеток возможного исходного положения персонажей
+   * @returns {[number][number]} - возвращает два массива: 1 - для пользователя, 2 - для противника
+   */
   arrayPosition() {
     const arrayPosition = [];
     let arrayTemp = [];
@@ -542,6 +493,12 @@ export default class GameController {
     return [userPositions, enemyPositions];
   }
   
+  /**
+   * Метод для получения ближайших клеток вокруг персонажа
+   * @param {number} index - индекс (положение) персонажа
+   * @param {number} distance - радиус поиска клеток для перемещения согласно схеме: влево-вправо, вверх-вниз, по диагонали
+   * @returns {[number]} - массив индексов клеток
+   */
   getNeighbourCells(index, distance) {
     const row = Math.floor(index / this.gamePlay.boardSize);
     const col = index % this.gamePlay.boardSize;
@@ -593,6 +550,12 @@ export default class GameController {
     return neighbours;
   }
 
+  /**
+   * Метод для получения клеток вокруг персонажа для атаки
+   * @param {number} index - индекс (положение) персонажа
+   * @param {number} distance - радиус атаки персонажа
+   * @returns {[number]} - массив индексов клеток, которые можно атаковать
+   */
   getNeighbourCellsAttack(index, distance) {
     const row = Math.floor(index / 8);
   
@@ -631,7 +594,12 @@ export default class GameController {
 
     return neighbours;
   }
-
+  
+  /**
+   * Метод для определения на какую дистанцию может перемещаться персонаж
+   * @param {string} characterType - тип персонажа в виде строки 'Bowman'
+   * @returns {number} - возвращает число
+   */
   getDistanceMove(characterType) {
     const distanceMove = [
       ['Bowman', 2],
@@ -649,6 +617,11 @@ export default class GameController {
     }
   }
 
+  /**
+   * Метод для определения на какую дистанцию может атаковать персонаж
+   * @param {string} characterType - тип персонажа в виде строки 'Bowman'
+   * @returns {number} - возвращает число
+   */
   getDistanceAttack(characterType) {
     const distanceAttack = [
       ['Bowman', 2],
@@ -669,5 +642,133 @@ export default class GameController {
   clearCellListeners() {
     this.gamePlay.cellClickListeners = [];
     this.gamePlay.cellEnterListeners = [];
+    this.gamePlay.cellLeaveListeners = [];
+  }
+
+  clearBtnListeners() {
+    this.gamePlay.newGameListeners = [];
+    this.gamePlay.saveGameListeners = [];
+    this.gamePlay.loadGameListeners = [];
+  }
+
+  /**
+   * Метод для вычисления полученных баллов по нанесенному урону
+   * @returns {number} - возвращает число
+   */
+  getPoints() { 
+    this.points = Math.round(this.points / 10);
+
+    if (this.maxPoints < this.points) {
+      this.maxPoints = this.points;
+
+    }
+    return this.maxPoints;
+  }
+
+  newGame() {
+    this.getPoints();
+    this.countTeam = 0;
+    this.points = 0;
+    this.gameOver = false;
+    this.currentThemeIndex = 0;
+    this.clearCellListeners();
+    this.clearBtnListeners();
+    this.init();
+  }
+
+  saveGame() {
+    const state = {
+      points: this.points,
+      maxPoints: this.maxPoints,
+      themes: this.currentThemeIndex,
+      activeCharacter: this.indexSelectedYellow,
+      positions: this.positionedCharactersAll,
+      nextStep: this.nextStep
+    };
+
+    this.stateService.save(GameState.from(state));
+  }
+
+  loadGame() {
+    const state = this.stateService.load();
+    
+    if (state) {
+      this.points = state.points;
+      this.maxPoints = state.maxPoints;
+      this.currentThemeIndex = state.themes;
+      this.indexSelectedYellow = state.activeCharacter;
+      this.positionedCharactersAll = state.positions;
+      this.nextStep = state.nextStep;
+      this.clearCellListeners();
+      // this.clearBtnListeners();
+      this.init()
+    }
+  }
+
+  /**
+   * Метод для проверки наличия персонажей в командах
+   */
+  checkTeam() {
+    const enemyArr = this.enemyTeam.characters.map((el) => el.constructor.name)
+    const userArr = this.userTeam.characters.map((el) => el.constructor.name)
+    let enemy = 0;
+    let user = 0;
+
+    this.positionedCharactersAll.forEach((pos) => {
+      if (enemyArr.includes(pos.character.constructor.name)) {
+        enemy = enemy + 1;
+      } else if (userArr.includes(pos.character.constructor.name)) {
+        user = user + 1;
+      }
+    })
+
+    if (enemy === 0) {
+      this.currentThemeIndex++;
+
+      if (this.currentThemeIndex < Object.values(themes).length) {
+        GamePlay.showMessage('Вы выиграли!');
+      }
+      
+      this.countTeam = this.userTeam.characters.length;
+
+      this.userTeam.characters.forEach((char) => {
+
+        if (char.health <= 0) {
+          char.health = 10;
+        }
+
+        this.levelUp(char)
+      })
+      this.gameWin = true;
+      
+      this.clearCellListeners();
+      this.init();
+      
+    } else if (user === 0) {
+      GamePlay.showMessage('Вы проиграли!');
+      this.countTeam = 0;
+      this.gameOver = true;
+      this.currentThemeIndex = 0;
+      this.clearCellListeners();
+      this.init();
+    }
+  }
+
+  /**
+   * Метод для увеличения уровня и характеристик
+   * @param {obj} character - персонаж
+   */
+  levelUp(character) {
+    character.attack = Math.round(Math.max(character.attack, character.attack * (80 + character.health) / 100));
+    character.defence = Math.round(Math.max(character.defence, character.defence * (80 + character.health) / 100));
+
+    if (character.health > 20) {
+      character.level++;
+    }    
+
+    character.health = character.health + 80;
+      if (character.health > 100) {
+        character.health = 100;
+      }
   }
 }
